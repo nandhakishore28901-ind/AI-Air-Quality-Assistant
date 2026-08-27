@@ -1,0 +1,4 @@
+timestamp,state,area,number_of_monitoring_stations,year,month,day,day_of_week,predicted_aqi,category
+2026-08-25 18:37:15,Tamilnadu,Avadi,12,2031,1,11,4,125.43,Moderate
+2026-08-25 18:45:36,Tamilnadu,chennai,5,2025,6,5,1,72.91,Satisfactory
+2026-08-25 18:46:12,Tamilnadu,chennai,5,2025,6,5,1,72.91,Satisfactory

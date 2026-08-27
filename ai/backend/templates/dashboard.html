@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+
+    <title>AQI Dashboard</title>
+
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='style.css') }}">
+
+</head>
+
+<body>
+
+<div class="container">
+
+    <!-- HEADER -->
+
+    <div class="header">
+
+        <div class="icon">📊</div>
+
+        <h1>Air Quality Dashboard</h1>
+
+        <p>
+            AI-powered prediction history and air quality insights
+        </p>
+
+    </div>
+
+
+    <!-- STATISTICS -->
+
+    <div class="stats-grid">
+
+        <div class="stat-card">
+
+            <div class="stat-icon">🔢</div>
+
+            <h3>Total Predictions</h3>
+
+            <div id="totalPredictions"
+                 class="stat-value">
+                0
+            </div>
+
+        </div>
+
+
+        <div class="stat-card">
+
+            <div class="stat-icon">📈</div>
+
+            <h3>Average AQI</h3>
+
+            <div id="averageAQI"
+                 class="stat-value">
+                0
+            </div>
+
+        </div>
+
+
+        <div class="stat-card">
+
+            <div class="stat-icon">🔴</div>
+
+            <h3>Highest AQI</h3>
+
+            <div id="highestAQI"
+                 class="stat-value">
+                0
+            </div>
+
+        </div>
+
+
+        <div class="stat-card">
+
+            <div class="stat-icon">🟢</div>
+
+            <h3>Lowest AQI</h3>
+
+            <div id="lowestAQI"
+                 class="stat-value">
+                0
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <!-- AQI CHART -->
+
+    <div class="dashboard-card">
+
+        <h2>📈 AQI Prediction Trend</h2>
+
+        <p class="subtitle">
+            AQI values from your previous predictions
+        </p>
+
+        <div class="chart-container">
+
+            <canvas id="aqiChart"></canvas>
+
+        </div>
+
+    </div>
+
+
+    <!-- HISTORY TABLE -->
+
+    <div class="dashboard-card">
+
+        <h2>📋 Prediction History</h2>
+
+        <p class="subtitle">
+            Latest predictions are shown first
+        </p>
+
+
+        <div class="table-container">
+
+            <table>
+
+                <thead>
+
+                    <tr>
+
+                        <th>Date & Time</th>
+
+                        <th>State</th>
+
+                        <th>Area</th>
+
+                        <th>Stations</th>
+
+                        <th>AQI</th>
+
+                        <th>Category</th>
+
+                    </tr>
+
+                </thead>
+
+
+                <tbody id="historyTable">
+
+                    <tr>
+
+                        <td colspan="6">
+                            Loading history...
+                        </td>
+
+                    </tr>
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+    </div>
+
+
+    <!-- NAVIGATION -->
+
+    <div class="dashboard-actions">
+
+        <a href="/" class="back-button">
+            ← Back to Prediction
+        </a>
+
+    </div>
+
+
+</div>
+
+
+<!-- Chart.js -->
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+
+<script>
+
+let aqiChart;
+
+
+/* ==========================================
+   Load Prediction History
+   ========================================== */
+
+async function loadHistory() {
+
+    try {
+
+        const response =
+            await fetch("/history");
+
+        const result =
+            await response.json();
+
+
+        if (!result.success) {
+
+            throw new Error(
+                result.error
+            );
+
+        }
+
+
+        const history =
+            result.history;
+
+
+        /* ======================================
+           No History
+           ====================================== */
+
+        if (history.length === 0) {
+
+            document.getElementById(
+                "historyTable"
+            ).innerHTML = `
+
+                <tr>
+
+                    <td colspan="6">
+                        No predictions available yet.
+                    </td>
+
+                </tr>
+
+            `;
+
+            return;
+
+        }
+
+
+        /* ======================================
+           Statistics
+           ====================================== */
+
+        const aqiValues =
+            history.map(
+                item =>
+                    Number(item.predicted_aqi)
+            );
+
+
+        const total =
+            aqiValues.length;
+
+
+        const average =
+            aqiValues.reduce(
+                (sum, value) =>
+                    sum + value,
+                0
+            ) / total;
+
+
+        const highest =
+            Math.max(...aqiValues);
+
+
+        const lowest =
+            Math.min(...aqiValues);
+
+
+        document.getElementById(
+            "totalPredictions"
+        ).textContent = total;
+
+
+        document.getElementById(
+            "averageAQI"
+        ).textContent =
+            average.toFixed(2);
+
+
+        document.getElementById(
+            "highestAQI"
+        ).textContent =
+            highest.toFixed(2);
+
+
+        document.getElementById(
+            "lowestAQI"
+        ).textContent =
+            lowest.toFixed(2);
+
+
+        /* ======================================
+           History Table
+           ====================================== */
+
+        const table =
+            document.getElementById(
+                "historyTable"
+            );
+
+
+        table.innerHTML = "";
+
+
+        history.forEach(
+            item => {
+
+                const row =
+                    document.createElement(
+                        "tr"
+                    );
+
+
+                row.innerHTML = `
+
+                    <td>
+                        ${item.timestamp}
+                    </td>
+
+                    <td>
+                        ${item.state}
+                    </td>
+
+                    <td>
+                        ${item.area}
+                    </td>
+
+                    <td>
+                        ${item.number_of_monitoring_stations}
+                    </td>
+
+                    <td>
+                        <strong>
+                            ${Number(
+                                item.predicted_aqi
+                            ).toFixed(2)}
+                        </strong>
+                    </td>
+
+                    <td>
+                        <span class="category-badge">
+                            ${item.category}
+                        </span>
+                    </td>
+
+                `;
+
+
+                table.appendChild(row);
+
+            }
+        );
+
+
+        /* ======================================
+           AQI Chart
+           ====================================== */
+
+        const chartLabels =
+            history.map(
+                item =>
+                    item.timestamp
+            ).reverse();
+
+
+        const chartValues =
+            history.map(
+                item =>
+                    Number(
+                        item.predicted_aqi
+                    )
+            ).reverse();
+
+
+        const ctx =
+            document.getElementById(
+                "aqiChart"
+            );
+
+
+        if (aqiChart) {
+
+            aqiChart.destroy();
+
+        }
+
+
+        aqiChart =
+            new Chart(
+                ctx,
+                {
+
+                    type: "line",
+
+                    data: {
+
+                        labels:
+                            chartLabels,
+
+                        datasets: [
+
+                            {
+
+                                label:
+                                    "Predicted AQI",
+
+                                data:
+                                    chartValues,
+
+                                tension:
+                                    0.3,
+
+                                fill:
+                                    false
+
+                            }
+
+                        ]
+
+                    },
+
+                    options: {
+
+                        responsive:
+                            true,
+
+                        maintainAspectRatio:
+                            false,
+
+                        scales: {
+
+                            y: {
+
+                                beginAtZero:
+                                    true,
+
+                                title: {
+
+                                    display:
+                                        true,
+
+                                    text:
+                                        "AQI"
+
+                                }
+
+                            }
+
+                        }
+
+                    }
+
+                }
+            );
+
+
+    }
+
+    catch (error) {
+
+        console.error(
+            "History error:",
+            error
+        );
+
+
+        document.getElementById(
+            "historyTable"
+        ).innerHTML = `
+
+            <tr>
+
+                <td colspan="6">
+
+                    Unable to load prediction history.
+
+                </td>
+
+            </tr>
+
+        `;
+
+    }
+
+}
+
+
+/* ==========================================
+   Load dashboard
+   ========================================== */
+
+loadHistory();
+
+</script>
+
+
+</body>
+
+</html>
