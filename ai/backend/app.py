@@ -1,583 +1,733 @@
-from flask import Flask, request, jsonify, render_template
-import pandas as pd
-import joblib
 import os
+import json
 from datetime import datetime
 
-app = Flask(__name__)
+import joblib
+import pandas as pd
 
-# =========================================================
-# PATH CONFIGURATION
-# =========================================================
+from flask import Flask, request, jsonify, render_template
+
+
+# ============================================================
+# PATHS
+# ============================================================
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-MODEL_FILE = os.path.join(
+TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
+STATIC_DIR = os.path.join(BASE_DIR, "static")
+HISTORY_DIR = os.path.join(BASE_DIR, "history")
+
+# Model location 1: ai/backend/aqi_prediction_model.pkl
+MODEL_PATH_BACKEND = os.path.join(
     BASE_DIR,
     "aqi_prediction_model.pkl"
 )
 
-HISTORY_FOLDER = os.path.join(
-    BASE_DIR,
-    "history"
+# Model location 2: ai/aqi_prediction_model.pkl
+MODEL_PATH_AI = os.path.join(
+    os.path.dirname(BASE_DIR),
+    "aqi_prediction_model.pkl"
 )
 
 HISTORY_FILE = os.path.join(
-    HISTORY_FOLDER,
-    "prediction_history.csv"
+    HISTORY_DIR,
+    "prediction_history.json"
 )
 
-# Create history folder
-os.makedirs(HISTORY_FOLDER, exist_ok=True)
+
+# ============================================================
+# CREATE HISTORY FOLDER
+# ============================================================
+
+os.makedirs(HISTORY_DIR, exist_ok=True)
 
 
-# =========================================================
-# LOAD ML MODEL
-# =========================================================
+# ============================================================
+# FLASK APP
+# ============================================================
 
-try:
-
-    model = joblib.load(MODEL_FILE)
-
-    print("==========================================")
-    print("AQI MODEL LOADED SUCCESSFULLY!")
-    print("Model:", MODEL_FILE)
-    print("==========================================")
-
-except Exception as e:
-
-    print("ERROR LOADING MODEL:")
-    print(e)
-
-    model = None
+app = Flask(
+    __name__,
+    template_folder=TEMPLATES_DIR,
+    static_folder=STATIC_DIR
+)
 
 
-# =========================================================
-# CREATE HISTORY FILE
-# =========================================================
+# ============================================================
+# LOAD MODEL
+# ============================================================
 
-if not os.path.exists(HISTORY_FILE):
+model = None
+MODEL_USED = None
 
-    history_columns = [
+MODEL_PATHS = [
+    MODEL_PATH_BACKEND,
+    MODEL_PATH_AI
+]
 
-        "timestamp",
-        "state",
-        "area",
-        "number_of_monitoring_stations",
-        "year",
-        "month",
-        "day",
-        "day_of_week",
-        "predicted_aqi",
-        "category"
+print("=" * 60)
+print("LOADING AQI MODEL")
+print("=" * 60)
 
-    ]
+for model_path in MODEL_PATHS:
 
-    pd.DataFrame(
-        columns=history_columns
-    ).to_csv(
-        HISTORY_FILE,
-        index=False
-    )
+    if os.path.exists(model_path):
+
+        try:
+
+            print("Model path:")
+            print(model_path)
+
+            model = joblib.load(model_path)
+
+            MODEL_USED = model_path
+
+            print("AQI MODEL LOADED SUCCESSFULLY")
+            print("=" * 60)
+
+            break
+
+        except Exception as error:
+
+            print("ERROR LOADING MODEL:")
+            print(error)
+            print("=" * 60)
 
 
-print("History file:")
-print(HISTORY_FILE)
+if model is None:
+
+    print("WARNING: AQI MODEL COULD NOT BE LOADED")
+
+    for path in MODEL_PATHS:
+        print("Checked:", path)
+
+    print("=" * 60)
 
 
-# =========================================================
-# AQI INFORMATION
-# =========================================================
+# ============================================================
+# AQI CATEGORY
+# ============================================================
 
-def get_aqi_information(aqi):
+def get_aqi_category(aqi):
+
+    if aqi <= 50:
+        return "Good"
+
+    elif aqi <= 100:
+        return "Satisfactory"
+
+    elif aqi <= 200:
+        return "Moderate"
+
+    elif aqi <= 300:
+        return "Poor"
+
+    elif aqi <= 400:
+        return "Very Poor"
+
+    else:
+        return "Severe"
+
+
+# ============================================================
+# HEALTH INFORMATION
+# ============================================================
+
+def get_health_information(aqi):
 
     if aqi <= 50:
 
-        return {
-
-            "category": "Good",
-
-            "health_message":
-                "Air quality is satisfactory and poses little or no health risk.",
-
-            "recommendation":
-                "Enjoy normal outdoor activities.",
-
-            "risk_level":
-                "Low",
-
-            "sustainability_score":
-                95,
-
-            "sustainability_actions": [
-
-                "Continue using public transport, walking or cycling when convenient.",
-
-                "Maintain green spaces and trees around the community.",
-
-                "Avoid unnecessary vehicle idling.",
-
-                "Continue responsible waste management.",
-
-                "Support clean-energy and low-emission practices."
-
-            ]
-
-        }
+        return (
+            "Air quality is good. "
+            "Outdoor activities are generally safe."
+        )
 
     elif aqi <= 100:
 
-        return {
-
-            "category": "Satisfactory",
-
-            "health_message":
-                "Air quality is acceptable, but some sensitive individuals may experience minor effects.",
-
-            "recommendation":
-                "Sensitive individuals should consider reducing prolonged outdoor activity.",
-
-            "risk_level":
-                "Low to Moderate",
-
-            "sustainability_score":
-                80,
-
-            "sustainability_actions": [
-
-                "Prefer public transport or shared transportation.",
-
-                "Reduce unnecessary private vehicle trips.",
-
-                "Avoid burning leaves or other waste.",
-
-                "Maintain trees and vegetation in the surrounding area.",
-
-                "Reduce unnecessary energy consumption."
-
-            ]
-
-        }
+        return (
+            "Air quality is satisfactory. "
+            "Sensitive individuals should monitor air quality."
+        )
 
     elif aqi <= 200:
 
-        return {
-
-            "category": "Moderate",
-
-            "health_message":
-                "Some people may experience health effects, especially sensitive groups.",
-
-            "recommendation":
-                "Sensitive individuals should limit prolonged outdoor exertion.",
-
-            "risk_level":
-                "Moderate",
-
-            "sustainability_score":
-                65,
-
-            "sustainability_actions": [
-
-                "Prefer public transport, carpooling or walking for short trips.",
-
-                "Reduce unnecessary vehicle usage.",
-
-                "Avoid open burning and unnecessary smoke generation.",
-
-                "Reduce activities that create dust.",
-
-                "Increase and protect green spaces.",
-
-                "Use energy-efficient appliances and reduce electricity waste."
-
-            ]
-
-        }
+        return (
+            "Air quality may affect sensitive individuals. "
+            "Reduce prolonged outdoor exposure if necessary."
+        )
 
     elif aqi <= 300:
 
-        return {
-
-            "category": "Poor",
-
-            "health_message":
-                "Health effects may be experienced by everyone.",
-
-            "recommendation":
-                "Reduce prolonged outdoor activity and avoid heavy exertion.",
-
-            "risk_level":
-                "High",
-
-            "sustainability_score":
-                45,
-
-            "sustainability_actions": [
-
-                "Avoid unnecessary vehicle trips.",
-
-                "Use public transportation whenever possible.",
-
-                "Avoid open waste burning completely.",
-
-                "Reduce dust-generating construction and outdoor activities.",
-
-                "Increase vegetation and dust-control measures.",
-
-                "Reduce industrial and household emissions where possible."
-
-            ]
-
-        }
+        return (
+            "Poor air quality may affect everyone. "
+            "Avoid prolonged or strenuous outdoor activity."
+        )
 
     elif aqi <= 400:
 
-        return {
-
-            "category": "Very Poor",
-
-            "health_message":
-                "Risk of health effects is increased for everyone.",
-
-            "recommendation":
-                "Avoid prolonged outdoor activity, especially strenuous exercise.",
-
-            "risk_level":
-                "Very High",
-
-            "sustainability_score":
-                25,
-
-            "sustainability_actions": [
-
-                "Minimize private vehicle usage.",
-
-                "Use public transportation or remote alternatives.",
-
-                "Stop open burning and unnecessary combustion activities.",
-
-                "Avoid dust-producing activities.",
-
-                "Implement strong emission-reduction measures.",
-
-                "Increase monitoring of major pollution sources.",
-
-                "Protect and expand vegetation wherever possible."
-
-            ]
-
-        }
+        return (
+            "Very poor air quality. "
+            "Avoid outdoor exposure as much as possible."
+        )
 
     else:
 
-        return {
-
-            "category": "Severe",
-
-            "health_message":
-                "Health alert: serious health effects may occur for everyone.",
-
-            "recommendation":
-                "Avoid outdoor exposure as much as possible.",
-
-            "risk_level":
-                "Critical",
-
-            "sustainability_score":
-                10,
-
-            "sustainability_actions": [
-
-                "Avoid unnecessary outdoor travel.",
-
-                "Minimize all avoidable vehicle emissions.",
-
-                "Stop open burning and combustion activities.",
-
-                "Implement emergency pollution-control measures.",
-
-                "Restrict dust-generating activities.",
-
-                "Increase air-quality monitoring and public alerts.",
-
-                "Promote immediate emission-reduction actions."
-
-            ]
-
-        }
+        return (
+            "Severe air pollution. "
+            "Avoid outdoor exposure and follow local health guidance."
+        )
 
 
-# =========================================================
+# ============================================================
+# RECOMMENDATIONS
+# ============================================================
+
+def get_recommendation(aqi):
+
+    if aqi <= 50:
+
+        return (
+            "Enjoy outdoor activities and continue maintaining "
+            "good environmental practices."
+        )
+
+    elif aqi <= 100:
+
+        return (
+            "Outdoor activities are generally acceptable. "
+            "Sensitive people should monitor air quality."
+        )
+
+    elif aqi <= 200:
+
+        return (
+            "Reduce prolonged outdoor activity and avoid "
+            "unnecessary exposure to polluted areas."
+        )
+
+    elif aqi <= 300:
+
+        return (
+            "Avoid strenuous outdoor activities. "
+            "Keep indoor areas well protected from polluted air."
+        )
+
+    elif aqi <= 400:
+
+        return (
+            "Avoid outdoor exposure as much as possible "
+            "and reduce unnecessary travel."
+        )
+
+    else:
+
+        return (
+            "Stay indoors where possible and avoid outdoor exposure. "
+            "Follow local health recommendations."
+        )
+
+
+# ============================================================
+# SUSTAINABILITY ACTIONS
+# ============================================================
+
+def get_sustainability_actions(aqi):
+
+    if aqi <= 50:
+
+        return [
+            "Walk or cycle for short-distance travel.",
+            "Use public transportation when practical.",
+            "Maintain trees and green spaces.",
+            "Continue energy-efficient practices."
+        ]
+
+    elif aqi <= 100:
+
+        return [
+            "Prefer public transportation or carpooling.",
+            "Avoid unnecessary vehicle idling.",
+            "Increase greenery around buildings.",
+            "Reduce unnecessary energy consumption."
+        ]
+
+    elif aqi <= 200:
+
+        return [
+            "Reduce unnecessary vehicle usage.",
+            "Prefer public transportation and carpooling.",
+            "Avoid open burning of waste.",
+            "Increase trees and vegetation around the campus."
+        ]
+
+    elif aqi <= 300:
+
+        return [
+            "Minimize vehicle trips.",
+            "Promote carpooling and public transportation.",
+            "Avoid dust-generating activities when possible.",
+            "Do not burn leaves or waste."
+        ]
+
+    elif aqi <= 400:
+
+        return [
+            "Significantly reduce vehicle usage.",
+            "Avoid unnecessary outdoor activities.",
+            "Control dust-producing activities.",
+            "Increase green buffers around polluted areas."
+        ]
+
+    else:
+
+        return [
+            "Minimize unnecessary outdoor exposure.",
+            "Reduce vehicle activity.",
+            "Stop open burning and avoid pollution sources.",
+            "Implement immediate pollution-control measures."
+        ]
+
+
+# ============================================================
+# SAVE HISTORY
+# ============================================================
+
+def save_prediction_history(record):
+
+    try:
+
+        history = []
+
+        if os.path.exists(HISTORY_FILE):
+
+            try:
+
+                with open(
+                    HISTORY_FILE,
+                    "r",
+                    encoding="utf-8"
+                ) as file:
+
+                    history = json.load(file)
+
+            except Exception:
+
+                history = []
+
+        if not isinstance(history, list):
+            history = []
+
+        history.insert(0, record)
+
+        # Keep latest 100 predictions
+        history = history[:100]
+
+        with open(
+            HISTORY_FILE,
+            "w",
+            encoding="utf-8"
+        ) as file:
+
+            json.dump(
+                history,
+                file,
+                indent=4
+            )
+
+        return True
+
+    except Exception as error:
+
+        print("HISTORY SAVE ERROR:")
+        print(error)
+
+        return False
+
+
+# ============================================================
+# LOAD HISTORY
+# ============================================================
+
+def load_prediction_history():
+
+    try:
+
+        if not os.path.exists(HISTORY_FILE):
+            return []
+
+        with open(
+            HISTORY_FILE,
+            "r",
+            encoding="utf-8"
+        ) as file:
+
+            history = json.load(file)
+
+        if not isinstance(history, list):
+            return []
+
+        return history
+
+    except Exception as error:
+
+        print("HISTORY LOAD ERROR:")
+        print(error)
+
+        return []
+
+
+# ============================================================
 # HOME PAGE
-# =========================================================
+# ============================================================
 
-@app.route("/", methods=["GET"])
+@app.route("/")
 def home():
 
-    return render_template(
-        "index.html"
-    )
+    return render_template("index.html")
 
 
-# =========================================================
+# ============================================================
 # DASHBOARD
-# =========================================================
+# ============================================================
 
-@app.route("/dashboard", methods=["GET"])
+@app.route("/dashboard")
 def dashboard():
 
-    return render_template(
-        "dashboard.html"
-    )
+    return render_template("dashboard.html")
 
 
-# =========================================================
-# API STATUS
-# =========================================================
+# ============================================================
+# HISTORY API
+# ============================================================
 
-@app.route("/api", methods=["GET"])
-def api_status():
+@app.route("/history", methods=["GET"])
+def history():
+
+    prediction_history = load_prediction_history()
 
     return jsonify({
-
-        "message":
-            "AI Air Quality Prediction API is running",
-
-        "status":
-            "success"
-
+        "success": True,
+        "history": prediction_history
     })
 
 
-# =========================================================
+# ============================================================
 # PREDICTION API
-# =========================================================
+#
+# Supports BOTH:
+#
+# /predict
+# /api/predict
+# ============================================================
 
 @app.route("/predict", methods=["POST"])
+@app.route("/api/predict", methods=["POST"])
 def predict():
 
     try:
 
+        print("=" * 60)
+        print("PREDICTION REQUEST RECEIVED")
+        print("=" * 60)
+
+
+        # ----------------------------------------------------
+        # CHECK MODEL
+        # ----------------------------------------------------
+
         if model is None:
 
+            print("MODEL IS NOT LOADED")
+
             return jsonify({
-
                 "success": False,
-
-                "error":
-                    "AQI model could not be loaded."
-
+                "error": "AQI model could not be loaded.",
+                "prediction_error": True
             }), 500
 
 
-        data = request.get_json()
+        # ----------------------------------------------------
+        # GET REQUEST DATA
+        # ----------------------------------------------------
+
+        data = request.get_json(
+            silent=True
+        )
+
+        print("Received data:")
+        print(data)
 
 
         if not data:
 
             return jsonify({
-
                 "success": False,
-
-                "error":
-                    "No input data received."
-
+                "error": "No input data received."
             }), 400
 
 
-        required_fields = [
+        # ----------------------------------------------------
+        # GET STATE
+        # ----------------------------------------------------
 
+        state = data.get(
             "state",
+            ""
+        )
+
+        # ----------------------------------------------------
+        # GET AREA
+        # ----------------------------------------------------
+
+        area = data.get(
             "area",
+            ""
+        )
+
+
+        # ----------------------------------------------------
+        # GET MONITORING STATIONS
+        # ----------------------------------------------------
+
+        number_of_monitoring_stations = data.get(
             "number_of_monitoring_stations",
-            "year",
-            "month",
-            "day",
-            "day_of_week"
-
-        ]
+            1
+        )
 
 
-        # -------------------------------------------------
-        # VALIDATE INPUT
-        # -------------------------------------------------
+        # ----------------------------------------------------
+        # VALIDATION
+        # ----------------------------------------------------
 
-        for field in required_fields:
+        if not state:
 
-            if field not in data:
-
-                return jsonify({
-
-                    "success": False,
-
-                    "error":
-                        f"Missing field: {field}"
-
-                }), 400
+            return jsonify({
+                "success": False,
+                "error": "State is required."
+            }), 400
 
 
-        # -------------------------------------------------
-        # CREATE MODEL INPUT
-        # -------------------------------------------------
+        if not area:
 
-        input_data = pd.DataFrame({
-
-            "state": [
-                data["state"]
-            ],
-
-            "area": [
-                data["area"]
-            ],
-
-            "number_of_monitoring_stations": [
-                data["number_of_monitoring_stations"]
-            ],
-
-            "year": [
-                data["year"]
-            ],
-
-            "month": [
-                data["month"]
-            ],
-
-            "day": [
-                data["day"]
-            ],
-
-            "day_of_week": [
-                data["day_of_week"]
-            ]
-
-        })
+            return jsonify({
+                "success": False,
+                "error": "Area is required."
+            }), 400
 
 
-        # -------------------------------------------------
-        # ML PREDICTION
-        # -------------------------------------------------
+        # ----------------------------------------------------
+        # CONVERT STATIONS
+        # ----------------------------------------------------
 
-        prediction = model.predict(
+        try:
+
+            number_of_monitoring_stations = int(
+                number_of_monitoring_stations
+            )
+
+        except (
+            ValueError,
+            TypeError
+        ):
+
+            number_of_monitoring_stations = 1
+
+
+        # ----------------------------------------------------
+        # DATE FEATURES
+        # ----------------------------------------------------
+
+        now = datetime.now()
+
+        year = now.year
+        month = now.month
+        day = now.day
+        day_of_week = now.weekday()
+
+
+        # ----------------------------------------------------
+        # MODEL INPUT
+        # ----------------------------------------------------
+
+        input_data = pd.DataFrame([{
+
+            "state": state,
+
+            "area": area,
+
+            "number_of_monitoring_stations":
+                number_of_monitoring_stations,
+
+            "year": year,
+
+            "month": month,
+
+            "day": day,
+
+            "day_of_week": day_of_week
+
+        }])
+
+
+        print("=" * 60)
+        print("INPUT SENT TO MODEL")
+        print("=" * 60)
+        print(input_data)
+        print("=" * 60)
+
+
+        # ----------------------------------------------------
+        # PREDICTION
+        # ----------------------------------------------------
+
+        predicted_aqi = model.predict(
             input_data
+        )[0]
+
+
+        predicted_aqi = float(
+            predicted_aqi
         )
 
 
-        predicted_aqi = round(
-            float(prediction[0]),
-            2
-        )
-
-
-        # Prevent unrealistic negative AQI
+        # Prevent negative AQI
         predicted_aqi = max(
             0,
             predicted_aqi
         )
 
 
-        # -------------------------------------------------
+        # ----------------------------------------------------
         # AQI INFORMATION
-        # -------------------------------------------------
+        # ----------------------------------------------------
 
-        aqi_info = get_aqi_information(
+        category = get_aqi_category(
             predicted_aqi
         )
 
+        health_information = get_health_information(
+            predicted_aqi
+        )
 
-        # -------------------------------------------------
-        # SAVE HISTORY
-        # -------------------------------------------------
+        recommendation = get_recommendation(
+            predicted_aqi
+        )
 
-        history_record = pd.DataFrame([{
+        sustainability_actions = (
+            get_sustainability_actions(
+                predicted_aqi
+            )
+        )
+
+
+        # ----------------------------------------------------
+        # TIMESTAMP
+        # ----------------------------------------------------
+
+        timestamp = now.strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
+
+
+        # ----------------------------------------------------
+        # HISTORY RECORD
+        # ----------------------------------------------------
+
+        history_record = {
 
             "timestamp":
-                datetime.now().strftime(
-                    "%Y-%m-%d %H:%M:%S"
-                ),
+                timestamp,
 
             "state":
-                data["state"],
+                state,
 
             "area":
-                data["area"],
+                area,
 
             "number_of_monitoring_stations":
-                data["number_of_monitoring_stations"],
-
-            "year":
-                data["year"],
-
-            "month":
-                data["month"],
-
-            "day":
-                data["day"],
-
-            "day_of_week":
-                data["day_of_week"],
+                number_of_monitoring_stations,
 
             "predicted_aqi":
-                predicted_aqi,
+                round(
+                    predicted_aqi,
+                    2
+                ),
 
             "category":
-                aqi_info["category"]
+                category
+        }
 
-        }])
 
+        # ----------------------------------------------------
+        # SAVE HISTORY
+        # ----------------------------------------------------
 
-        history_record.to_csv(
-
-            HISTORY_FILE,
-
-            mode="a",
-
-            header=False,
-
-            index=False
-
+        save_prediction_history(
+            history_record
         )
 
 
-        # -------------------------------------------------
-        # RETURN RESULT
-        # -------------------------------------------------
+        # ----------------------------------------------------
+        # RESPONSE
+        # ----------------------------------------------------
 
-        return jsonify({
+        result = {
 
             "success":
                 True,
 
             "predicted_aqi":
-                predicted_aqi,
+                round(
+                    predicted_aqi,
+                    2
+                ),
 
             "category":
-                aqi_info["category"],
+                category,
 
-            "health_message":
-                aqi_info["health_message"],
+            "health_information":
+                health_information,
 
             "recommendation":
-                aqi_info["recommendation"],
-
-            "risk_level":
-                aqi_info["risk_level"],
-
-            "sustainability_score":
-                aqi_info["sustainability_score"],
+                recommendation,
 
             "sustainability_actions":
-                aqi_info["sustainability_actions"]
+                sustainability_actions,
 
-        })
+            "timestamp":
+                timestamp
+        }
 
 
-    except Exception as e:
+        print("=" * 60)
+        print("PREDICTION SUCCESSFUL")
+        print("AQI:", predicted_aqi)
+        print("CATEGORY:", category)
+        print("=" * 60)
+
+
+        return jsonify(
+            result
+        )
+
+
+    except Exception as error:
+
+        print("=" * 60)
+        print("PREDICTION ERROR")
+        print("=" * 60)
 
         print(
-            "Prediction error:",
-            e
+            type(error).__name__
         )
+
+        print(
+            str(error)
+        )
+
+        print("=" * 60)
+
 
         return jsonify({
 
@@ -585,83 +735,109 @@ def predict():
                 False,
 
             "error":
-                str(e)
+                str(error),
+
+            "prediction_error":
+                True
 
         }), 500
 
 
-# =========================================================
-# PREDICTION HISTORY API
-# =========================================================
+# ============================================================
+# HEALTH CHECK
+# ============================================================
 
-@app.route("/history", methods=["GET"])
-def history():
+@app.route("/health", methods=["GET"])
+def health():
 
-    try:
+    return jsonify({
 
-        history_data = pd.read_csv(
-            HISTORY_FILE
-        )
+        "status":
+            "running",
 
+        "model_loaded":
+            model is not None,
 
-        if history_data.empty:
+        "model_path":
+            MODEL_USED,
 
-            return jsonify({
+        "templates_path":
+            TEMPLATES_DIR,
 
-                "success":
-                    True,
+        "templates_exist":
+            os.path.exists(
+                TEMPLATES_DIR
+            ),
 
-                "history":
-                    []
+        "index_exists":
+            os.path.exists(
+                os.path.join(
+                    TEMPLATES_DIR,
+                    "index.html"
+                )
+            ),
 
-            })
+        "dashboard_exists":
+            os.path.exists(
+                os.path.join(
+                    TEMPLATES_DIR,
+                    "dashboard.html"
+                )
+            ),
 
+        "static_path":
+            STATIC_DIR,
 
-        # Latest first
-        history_data = history_data.iloc[::-1]
+        "static_exists":
+            os.path.exists(
+                STATIC_DIR
+            )
 
-
-        records = history_data.to_dict(
-            orient="records"
-        )
-
-
-        return jsonify({
-
-            "success":
-                True,
-
-            "history":
-                records
-
-        })
-
-
-    except Exception as e:
-
-        return jsonify({
-
-            "success":
-                False,
-
-            "error":
-                str(e)
-
-        }), 500
+    })
 
 
-# =========================================================
+# ============================================================
 # START FLASK
-# =========================================================
+# ============================================================
 
 if __name__ == "__main__":
 
+    print("=" * 60)
+    print("AI AIR QUALITY ASSISTANT")
+    print("=" * 60)
+
+    print("Backend folder:")
+    print(BASE_DIR)
+
+    print()
+
+    print("Templates folder:")
+    print(TEMPLATES_DIR)
+
+    print()
+
+    print("Static folder:")
+    print(STATIC_DIR)
+
+    print()
+
+    print("History folder:")
+    print(HISTORY_DIR)
+
+    print()
+
+    print("Model:")
+    print(MODEL_USED)
+
+    print()
+
+    print("Model loaded:")
+    print(model is not None)
+
+    print("=" * 60)
+
     app.run(
-
-        host="127.0.0.1",
-
+        host="0.0.0.0",
         port=5000,
-
         debug=True
-
     )
