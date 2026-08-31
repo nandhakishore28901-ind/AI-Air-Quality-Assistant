@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import joblib
+import os
 
 from sklearn.model_selection import train_test_split
 from sklearn.compose import ColumnTransformer
@@ -15,7 +16,9 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 # 1. Load cleaned dataset
 # ==========================================
 
-df = pd.read_csv("data/cleaned/historical_aqi_cleaned.csv")
+df = pd.read_csv(
+    "data/cleaned/historical_aqi_cleaned.csv"
+)
 
 print("Dataset Shape:", df.shape)
 
@@ -24,7 +27,10 @@ print("Dataset Shape:", df.shape)
 # 2. Convert date
 # ==========================================
 
-df["date"] = pd.to_datetime(df["date"], errors="coerce")
+df["date"] = pd.to_datetime(
+    df["date"],
+    errors="coerce"
+)
 
 
 # ==========================================
@@ -38,10 +44,12 @@ df["day_of_week"] = df["date"].dt.dayofweek
 
 
 # ==========================================
-# 4. Remove rows with invalid target/date
+# 4. Remove invalid rows
 # ==========================================
 
-df = df.dropna(subset=["aqi_value", "date"])
+df = df.dropna(
+    subset=["aqi_value", "date"]
+)
 
 
 # ==========================================
@@ -80,7 +88,7 @@ print("Testing samples:", len(X_test))
 
 
 # ==========================================
-# 7. Identify feature types
+# 7. Feature Types
 # ==========================================
 
 categorical_features = [
@@ -98,18 +106,33 @@ numeric_features = [
 
 
 # ==========================================
-# 8. Preprocessing
+# 8. Numeric Preprocessing
 # ==========================================
 
 numeric_transformer = Pipeline(
     steps=[
-        ("imputer", SimpleImputer(strategy="median"))
+        (
+            "imputer",
+            SimpleImputer(
+                strategy="median"
+            )
+        )
     ]
 )
 
+
+# ==========================================
+# 9. Categorical Preprocessing
+# ==========================================
+
 categorical_transformer = Pipeline(
     steps=[
-        ("imputer", SimpleImputer(strategy="most_frequent")),
+        (
+            "imputer",
+            SimpleImputer(
+                strategy="most_frequent"
+            )
+        ),
         (
             "onehot",
             OneHotEncoder(
@@ -118,6 +141,11 @@ categorical_transformer = Pipeline(
         )
     ]
 )
+
+
+# ==========================================
+# 10. Complete Preprocessor
+# ==========================================
 
 preprocessor = ColumnTransformer(
     transformers=[
@@ -136,60 +164,78 @@ preprocessor = ColumnTransformer(
 
 
 # ==========================================
-# 9. Optimized Random Forest Model
+# 11. Smaller Random Forest Model
 # ==========================================
 
 model = RandomForestRegressor(
-    n_estimators=100,
-    max_depth=20,
+    n_estimators=50,
+    max_depth=12,
     min_samples_split=5,
     min_samples_leaf=2,
+    max_features="sqrt",
     random_state=42,
     n_jobs=-1
 )
 
 
 # ==========================================
-# 10. Complete ML Pipeline
+# 12. Complete ML Pipeline
 # ==========================================
 
 pipeline = Pipeline(
     steps=[
-        ("preprocessor", preprocessor),
-        ("model", model)
+        (
+            "preprocessor",
+            preprocessor
+        ),
+        (
+            "model",
+            model
+        )
     ]
 )
 
 
 # ==========================================
-# 11. Train Model
+# 13. Train Model
 # ==========================================
 
 print("\nTraining model...")
 print("Please wait...")
 
-pipeline.fit(X_train, y_train)
+pipeline.fit(
+    X_train,
+    y_train
+)
 
 print("Training complete.")
 
 
 # ==========================================
-# 12. Predictions
+# 14. Generate Predictions
 # ==========================================
 
 print("\nGenerating predictions...")
 
-y_pred = pipeline.predict(X_test)
+y_pred = pipeline.predict(
+    X_test
+)
 
 
 # ==========================================
-# 13. Model Evaluation
+# 15. Model Evaluation
 # ==========================================
 
-mae = mean_absolute_error(y_test, y_pred)
+mae = mean_absolute_error(
+    y_test,
+    y_pred
+)
 
 rmse = np.sqrt(
-    mean_squared_error(y_test, y_pred)
+    mean_squared_error(
+        y_test,
+        y_pred
+    )
 )
 
 r2 = r2_score(
@@ -200,35 +246,87 @@ r2 = r2_score(
 
 print("\n========== MODEL PERFORMANCE ==========")
 
-print("MAE :", round(mae, 2))
-print("RMSE:", round(rmse, 2))
-print("R²  :", round(r2, 4))
+print(
+    "MAE :",
+    round(mae, 2)
+)
+
+print(
+    "RMSE:",
+    round(rmse, 2)
+)
+
+print(
+    "R²  :",
+    round(r2, 4)
+)
 
 
 # ==========================================
-# 14. Compare Actual vs Predicted
+# 16. Actual vs Predicted
 # ==========================================
 
 comparison = pd.DataFrame({
     "Actual_AQI": y_test.values,
-    "Predicted_AQI": np.round(y_pred, 2)
+    "Predicted_AQI": np.round(
+        y_pred,
+        2
+    )
 })
 
+print(
+    "\n========== ACTUAL VS PREDICTED =========="
+)
 
-print("\n========== ACTUAL VS PREDICTED ==========")
-
-print(comparison.head(10))
+print(
+    comparison.head(10)
+)
 
 
 # ==========================================
-# 15. Save Trained Model
+# 17. Save Trained Model
 # ==========================================
+
+MODEL_PATH = "ai/aqi_prediction_model.pkl"
+
+print("\nSaving model...")
 
 joblib.dump(
     pipeline,
-    "ai/aqi_prediction_model.pkl"
+    MODEL_PATH,
+    compress=3
 )
 
-print("\nModel saved successfully!")
+print(
+    "\nModel saved successfully!"
+)
 
-print("\n========== MODEL TRAINING COMPLETE ==========")
+print(
+    "Model location:",
+    MODEL_PATH
+)
+
+
+# ==========================================
+# 18. Check Model Size
+# ==========================================
+
+if os.path.exists(MODEL_PATH):
+
+    model_size_mb = (
+        os.path.getsize(MODEL_PATH)
+        / (1024 * 1024)
+    )
+
+    print(
+        f"Model size: {model_size_mb:.2f} MB"
+    )
+
+
+# ==========================================
+# 19. Complete
+# ==========================================
+
+print(
+    "\n========== MODEL TRAINING COMPLETE =========="
+)
