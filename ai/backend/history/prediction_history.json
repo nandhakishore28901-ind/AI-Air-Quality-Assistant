@@ -1,0 +1,32 @@
+[
+    {
+        "timestamp": "2026-09-01 11:05:22",
+        "state": "telangana",
+        "area": "warangal",
+        "number_of_monitoring_stations": 4,
+        "year": 2026,
+        "month": 9,
+        "day": 1,
+        "day_of_week": 1,
+        "predicted_aqi": 103.63,
+        "category": "Moderate",
+        "risk_level": "Moderate",
+        "health_information": "Air quality may affect sensitive individuals. Reduce prolonged outdoor exposure if necessary.",
+        "recommendation": "Reduce prolonged outdoor activity and avoid unnecessary exposure to polluted areas.",
+        "sustainability_score": 5,
+        "sustainability_actions": [
+            "Reduce unnecessary vehicle usage.",
+            "Prefer public transportation and carpooling.",
+            "Avoid open burning of waste.",
+            "Increase trees and vegetation around the campus."
+        ]
+    },
+    {
+        "timestamp": "2026-09-01 10:53:03",
+        "state": "telangana",
+        "area": "warangal",
+        "number_of_monitoring_stations": 2,
+        "predicted_aqi": 103.61,
+        "category": "Moderate"
+    }
+]

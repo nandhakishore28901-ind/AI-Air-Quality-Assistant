@@ -18,13 +18,12 @@ TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 HISTORY_DIR = os.path.join(BASE_DIR, "history")
 
-# Model location 1: ai/backend/aqi_prediction_model.pkl
+# Model locations
 MODEL_PATH_BACKEND = os.path.join(
     BASE_DIR,
     "aqi_prediction_model.pkl"
 )
 
-# Model location 2: ai/aqi_prediction_model.pkl
 MODEL_PATH_AI = os.path.join(
     os.path.dirname(BASE_DIR),
     "aqi_prediction_model.pkl"
@@ -37,7 +36,7 @@ HISTORY_FILE = os.path.join(
 
 
 # ============================================================
-# CREATE HISTORY FOLDER
+# CREATE REQUIRED DIRECTORIES
 # ============================================================
 
 os.makedirs(HISTORY_DIR, exist_ok=True)
@@ -55,7 +54,7 @@ app = Flask(
 
 
 # ============================================================
-# LOAD MODEL
+# LOAD AQI MODEL
 # ============================================================
 
 model = None
@@ -76,7 +75,7 @@ for model_path in MODEL_PATHS:
 
         try:
 
-            print("Model path:")
+            print("Checking model:")
             print(model_path)
 
             model = joblib.load(model_path)
@@ -128,6 +127,31 @@ def get_aqi_category(aqi):
 
     else:
         return "Severe"
+
+
+# ============================================================
+# RISK LEVEL
+# ============================================================
+
+def get_risk_level(aqi):
+
+    if aqi <= 50:
+        return "Low"
+
+    elif aqi <= 100:
+        return "Low to Moderate"
+
+    elif aqi <= 200:
+        return "Moderate"
+
+    elif aqi <= 300:
+        return "High"
+
+    elif aqi <= 400:
+        return "Very High"
+
+    else:
+        return "Critical"
 
 
 # ============================================================
@@ -290,6 +314,31 @@ def get_sustainability_actions(aqi):
 
 
 # ============================================================
+# SUSTAINABILITY SCORE
+# ============================================================
+
+def get_sustainability_score(aqi):
+
+    if aqi <= 50:
+        return 1
+
+    elif aqi <= 100:
+        return 3
+
+    elif aqi <= 200:
+        return 5
+
+    elif aqi <= 300:
+        return 7
+
+    elif aqi <= 400:
+        return 9
+
+    else:
+        return 10
+
+
+# ============================================================
 # SAVE HISTORY
 # ============================================================
 
@@ -381,7 +430,7 @@ def load_prediction_history():
 # HOME PAGE
 # ============================================================
 
-@app.route("/")
+@app.route("/", methods=["GET"])
 def home():
 
     return render_template("index.html")
@@ -391,10 +440,25 @@ def home():
 # DASHBOARD
 # ============================================================
 
-@app.route("/dashboard")
+@app.route("/dashboard", methods=["GET"])
 def dashboard():
 
     return render_template("dashboard.html")
+
+
+# ============================================================
+# API STATUS
+# ============================================================
+
+@app.route("/api", methods=["GET"])
+def api_status():
+
+    return jsonify({
+        "success": True,
+        "status": "running",
+        "message": "AI Air Quality Prediction API is running",
+        "model_loaded": model is not None
+    })
 
 
 # ============================================================
@@ -402,6 +466,7 @@ def dashboard():
 # ============================================================
 
 @app.route("/history", methods=["GET"])
+@app.route("/api/history", methods=["GET"])
 def history():
 
     prediction_history = load_prediction_history()
@@ -414,11 +479,6 @@ def history():
 
 # ============================================================
 # PREDICTION API
-#
-# Supports BOTH:
-#
-# /predict
-# /api/predict
 # ============================================================
 
 @app.route("/predict", methods=["POST"])
@@ -431,10 +491,9 @@ def predict():
         print("PREDICTION REQUEST RECEIVED")
         print("=" * 60)
 
-
-        # ----------------------------------------------------
+        # ====================================================
         # CHECK MODEL
-        # ----------------------------------------------------
+        # ====================================================
 
         if model is None:
 
@@ -447,48 +506,45 @@ def predict():
             }), 500
 
 
-        # ----------------------------------------------------
+        # ====================================================
         # GET REQUEST DATA
-        # ----------------------------------------------------
+        # ====================================================
 
-        data = request.get_json(
-            silent=True
-        )
+        data = request.get_json(silent=True)
 
         print("Received data:")
         print(data)
-
 
         if not data:
 
             return jsonify({
                 "success": False,
-                "error": "No input data received."
+                "error": "No input data received.",
+                "prediction_error": True
             }), 400
 
 
-        # ----------------------------------------------------
+        # ====================================================
         # GET STATE
-        # ----------------------------------------------------
+        # ====================================================
 
-        state = data.get(
-            "state",
-            ""
-        )
+        state = str(
+            data.get("state", "")
+        ).strip()
 
-        # ----------------------------------------------------
+
+        # ====================================================
         # GET AREA
-        # ----------------------------------------------------
+        # ====================================================
 
-        area = data.get(
-            "area",
-            ""
-        )
+        area = str(
+            data.get("area", "")
+        ).strip()
 
 
-        # ----------------------------------------------------
+        # ====================================================
         # GET MONITORING STATIONS
-        # ----------------------------------------------------
+        # ====================================================
 
         number_of_monitoring_stations = data.get(
             "number_of_monitoring_stations",
@@ -496,9 +552,9 @@ def predict():
         )
 
 
-        # ----------------------------------------------------
+        # ====================================================
         # VALIDATION
-        # ----------------------------------------------------
+        # ====================================================
 
         if not state:
 
@@ -516,9 +572,9 @@ def predict():
             }), 400
 
 
-        # ----------------------------------------------------
+        # ====================================================
         # CONVERT STATIONS
-        # ----------------------------------------------------
+        # ====================================================
 
         try:
 
@@ -534,9 +590,14 @@ def predict():
             number_of_monitoring_stations = 1
 
 
-        # ----------------------------------------------------
-        # DATE FEATURES
-        # ----------------------------------------------------
+        if number_of_monitoring_stations < 1:
+
+            number_of_monitoring_stations = 1
+
+
+        # ====================================================
+        # CURRENT DATE FEATURES
+        # ====================================================
 
         now = datetime.now()
 
@@ -546,9 +607,9 @@ def predict():
         day_of_week = now.weekday()
 
 
-        # ----------------------------------------------------
+        # ====================================================
         # MODEL INPUT
-        # ----------------------------------------------------
+        # ====================================================
 
         input_data = pd.DataFrame([{
 
@@ -573,36 +634,51 @@ def predict():
         print("=" * 60)
         print("INPUT SENT TO MODEL")
         print("=" * 60)
+
         print(input_data)
+
         print("=" * 60)
 
 
-        # ----------------------------------------------------
-        # PREDICTION
-        # ----------------------------------------------------
+        # ====================================================
+        # ML PREDICTION
+        # ====================================================
 
-        predicted_aqi = model.predict(
+        prediction = model.predict(
             input_data
         )[0]
 
 
         predicted_aqi = float(
-            predicted_aqi
+            prediction
         )
 
 
-        # Prevent negative AQI
+        # ====================================================
+        # PREVENT INVALID NEGATIVE AQI
+        # ====================================================
+
         predicted_aqi = max(
             0,
             predicted_aqi
         )
 
 
-        # ----------------------------------------------------
-        # AQI INFORMATION
-        # ----------------------------------------------------
+        predicted_aqi = round(
+            predicted_aqi,
+            2
+        )
+
+
+        # ====================================================
+        # GENERATE AQI INFORMATION
+        # ====================================================
 
         category = get_aqi_category(
+            predicted_aqi
+        )
+
+        risk_level = get_risk_level(
             predicted_aqi
         )
 
@@ -620,19 +696,25 @@ def predict():
             )
         )
 
+        sustainability_score = (
+            get_sustainability_score(
+                predicted_aqi
+            )
+        )
 
-        # ----------------------------------------------------
+
+        # ====================================================
         # TIMESTAMP
-        # ----------------------------------------------------
+        # ====================================================
 
         timestamp = now.strftime(
             "%Y-%m-%d %H:%M:%S"
         )
 
 
-        # ----------------------------------------------------
+        # ====================================================
         # HISTORY RECORD
-        # ----------------------------------------------------
+        # ====================================================
 
         history_record = {
 
@@ -648,43 +730,26 @@ def predict():
             "number_of_monitoring_stations":
                 number_of_monitoring_stations,
 
-            "predicted_aqi":
-                round(
-                    predicted_aqi,
-                    2
-                ),
+            "year":
+                year,
 
-            "category":
-                category
-        }
+            "month":
+                month,
 
+            "day":
+                day,
 
-        # ----------------------------------------------------
-        # SAVE HISTORY
-        # ----------------------------------------------------
-
-        save_prediction_history(
-            history_record
-        )
-
-
-        # ----------------------------------------------------
-        # RESPONSE
-        # ----------------------------------------------------
-
-        result = {
-
-            "success":
-                True,
+            "day_of_week":
+                day_of_week,
 
             "predicted_aqi":
-                round(
-                    predicted_aqi,
-                    2
-                ),
+                predicted_aqi,
 
             "category":
                 category,
+
+            "risk_level":
+                risk_level,
 
             "health_information":
                 health_information,
@@ -692,18 +757,146 @@ def predict():
             "recommendation":
                 recommendation,
 
+            "sustainability_score":
+                sustainability_score,
+
+            "sustainability_actions":
+                sustainability_actions
+
+        }
+
+
+        # ====================================================
+        # SAVE HISTORY
+        # ====================================================
+
+        save_prediction_history(
+            history_record
+        )
+
+
+        # ====================================================
+        # FINAL API RESPONSE
+        #
+        # Multiple aliases are intentionally included so
+        # the existing frontend can use either naming style.
+        # ====================================================
+
+        result = {
+
+            "success":
+                True,
+
+            # AQI
+            "predicted_aqi":
+                predicted_aqi,
+
+            "aqi":
+                predicted_aqi,
+
+            "prediction":
+                predicted_aqi,
+
+
+            # CATEGORY
+            "category":
+                category,
+
+            "aqi_category":
+                category,
+
+
+            # RISK
+            "risk_level":
+                risk_level,
+
+            "risk":
+                risk_level,
+
+
+            # HEALTH
+            "health_information":
+                health_information,
+
+            "health_info":
+                health_information,
+
+            "health_message":
+                health_information,
+
+            "health":
+                health_information,
+
+
+            # RECOMMENDATION
+            "recommendation":
+                recommendation,
+
+            "recommendations":
+                recommendation,
+
+
+            # SUSTAINABILITY
             "sustainability_actions":
                 sustainability_actions,
 
+            "sustainability":
+                sustainability_actions,
+
+            "actions":
+                sustainability_actions,
+
+
+            # SCORE
+            "sustainability_score":
+                sustainability_score,
+
+
+            # INPUT INFORMATION
+            "state":
+                state,
+
+            "area":
+                area,
+
+            "number_of_monitoring_stations":
+                number_of_monitoring_stations,
+
+
+            # DATE
+            "year":
+                year,
+
+            "month":
+                month,
+
+            "day":
+                day,
+
+            "day_of_week":
+                day_of_week,
+
+
+            # TIME
             "timestamp":
                 timestamp
+
         }
 
 
         print("=" * 60)
         print("PREDICTION SUCCESSFUL")
+        print("=" * 60)
+
         print("AQI:", predicted_aqi)
         print("CATEGORY:", category)
+        print("RISK:", risk_level)
+        print("HEALTH:", health_information)
+        print("RECOMMENDATION:", recommendation)
+        print("SUSTAINABILITY SCORE:", sustainability_score)
+        print("SUSTAINABILITY ACTIONS:")
+        print(sustainability_actions)
+
         print("=" * 60)
 
 
@@ -791,6 +984,14 @@ def health():
         "static_exists":
             os.path.exists(
                 STATIC_DIR
+            ),
+
+        "history_file":
+            HISTORY_FILE,
+
+        "history_exists":
+            os.path.exists(
+                HISTORY_FILE
             )
 
     })
@@ -836,8 +1037,17 @@ if __name__ == "__main__":
 
     print("=" * 60)
 
+    # Render provides PORT through environment variable.
+    # Local testing defaults to 5000.
+    port = int(
+        os.environ.get(
+            "PORT",
+            5000
+        )
+    )
+
     app.run(
         host="0.0.0.0",
-        port=5000,
-        debug=True
+        port=port,
+        debug=False
     )
